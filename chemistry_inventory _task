@@ -1,0 +1,567 @@
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#define _CRT_NONSTDC_NO_DEPRECATE
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+typedef struct buyInfo
+{
+	char chem_name[41];
+	char chem_code[21];
+	long quantity;
+	long cost;
+} buyInfo;
+typedef struct invInfo
+{
+	char chem_name[41];
+	char chem_code[21];
+	int quantity;
+} invInfo;
+typedef struct chemNode
+{
+	invInfo data;
+	struct chemNode* left;
+	struct chemNode* right;
+} chemNode;
+typedef struct chemTree
+{
+	double balance;
+	chemNode* root;
+} chemTree;
+
+
+chemTree* initInventory(char* invFileName, double bal, chemTree* invTree);
+FILE* initErr(char* errFileName, FILE* currErr);
+chemTree* buildTree(char* txtFileName, chemTree* root);
+chemNode* buildNode(FILE* currInv);
+void insert(chemNode** root, chemNode* newNode);
+FILE* initErr(char* errFileName, FILE* currErr);
+int saveInventory(char* invFileName, char* errFileName, chemTree* currInv, FILE* currErr);
+void print_menu();
+void inorder_print_to_file(chemNode* node, FILE* new_file);
+void makeSale(char* saleFileName, chemTree* currInv, FILE* currErr);
+int update_chemTree(chemTree* tree, char* chemcode, char* quantity);
+void destroyTree(chemNode* tree);
+void write_new_error(FILE* error, char* line);
+void makePurchase(struct buyInfo* buy, chemTree* currInv);
+chemNode* make_node(invInfo* data);
+
+chemNode* make_node(invInfo* data)
+{
+	chemNode* newnode;
+	newnode = (chemNode*)malloc(sizeof(chemNode));
+	if (newnode == NULL)
+	{
+		exit(0);//allocation faild
+	}
+	strcpy(newnode->data.chem_name, data->chem_name);
+	strcpy(newnode->data.chem_code, data->chem_code);
+	newnode->data.quantity = data->quantity;
+	newnode->right = newnode->left = NULL;
+	return newnode;
+}
+void makePurchase(struct buyInfo* buy, chemTree* currInv)
+{
+	double total_cost;
+	int status = 0;//if not found chem=0,else 1
+	chemNode* foundNode = NULL;
+	chemNode* currNode = currInv->root;//pointer to the first node
+	while (currNode)//to search the corract node
+	{
+		if (strcmp(buy->chem_code, currNode->data.chem_code) == 0)//find the node by chem code
+		{
+			foundNode = currNode;
+			status = 1;//status changed to 1 if chemcode founde and quantity is valid
+		}
+		if (strcmp(buy->chem_code, currNode->data.chem_code) < 0)
+		{
+			currNode = currNode->left;
+		}
+		else
+		{
+			currNode = currNode->right;
+		}
+	}
+
+	if (status == 0)//if cant find node creates knew chemnode
+	{
+		currNode = malloc(1 * sizeof(chemNode));//crate new memmory space for new node
+		if (currNode == NULL)
+		{
+			exit(0);//memmory allocation faild
+		}
+		strcpy(currNode->data.chem_code, buy->chem_code);//copy chem code
+		strcpy(currNode->data.chem_name, buy->chem_name);//copy chem name
+		currNode->data.quantity = buy->quantity;//copy quantity
+		insert(&(currInv->root), currNode);
+		total_cost = buy->cost;//cost
+		currInv->balance -= total_cost;//update balance
+		free(currNode);
+	}
+	else
+	{
+		foundNode->data.quantity += buy->quantity;
+		total_cost = buy->cost;//cost
+		currInv->balance -= total_cost;//update balance
+	}
+
+
+}
+
+
+void destroyTree(chemNode* root)
+{
+	if (root != NULL)
+	{
+		destroyTree(root->left);
+		destroyTree(root->right);
+		free(root);
+	}
+}
+
+int update_chemTree(chemTree* tree, char* chemcode, char* quantity)//function return zero if tree updated, returns 0 if quantity not sufficient or chemcode not found
+{
+		
+	char* endptr;
+	int status = 0;//if update fail=0,else 1
+	int new_quantity;
+	chemNode* currNode = tree->root;//pointer to the first node
+	while (currNode!=NULL)//to search the corract node
+	{
+		if (strcmp(currNode->data.chem_code,chemcode) == 0)//find the node by chem code
+		{
+			new_quantity = (int)currNode->data.quantity -  atoi(quantity);//remove from node quantity the sale
+		
+			if (new_quantity < 0)
+			{
+			  
+				return 0; //if the quantity - sale quantity<0 =error
+			}
+			currNode->data.quantity = new_quantity;//update the new quantity
+			return 1;//status changed to 1 if chemcode founde and quantity is valid
+		}
+		if (strcmp(chemcode , currNode->data.chem_code)<0)
+		{
+			currNode = currNode->left;
+		}
+		else
+		{
+			currNode = currNode->right;
+		}
+	}
+	return status;//in case no chemcode is matching
+}
+void makeSale(char* saleFileName, chemTree* currInv, FILE* currErr)
+{
+	char* endptr;
+	char* repName = calloc(200, sizeof(char));
+	if (repName == NULL)
+	{
+		exit(0);//memmory allocation faild
+	}
+	printf("Please enter name of sales representative (no spaces):");
+	scanf("%s", repName);
+	char temp = ' ';//used to read /n and spaces
+	//FILE* pErrors = fopen(currErr, "a");
+	int update_status;
+	char* error_line = calloc(60, sizeof(char));
+	char* chemcode = calloc(20, sizeof(char));
+	char* quantity = calloc(9, sizeof(char));
+	char* price = calloc(9, sizeof(char));
+	if (error_line == NULL || chemcode == NULL || quantity == NULL || price == NULL)
+	{
+		exit(0);//memmory allocation failed
+	}
+	int res = 0;
+	FILE* sale_file = fopen(saleFileName, "r");
+	if (sale_file != NULL)
+	{
+		while (res != EOF)
+		{
+			res = fscanf(sale_file, "%[^ ]%c", chemcode, &temp);//read chem code from sale file
+			if (res == EOF)
+			{
+				break;
+			}
+			res = fscanf(sale_file, "%[^ ]%c", quantity, &temp);//read quantity from sale file
+			res = fscanf(sale_file, "%[^\n]%c", price, &temp);//read cost from sale file
+			update_status = update_chemTree(currInv, chemcode, quantity);
+			if (update_status == 0)
+			{
+				strcpy(error_line, " ");
+				strcat(error_line, chemcode);
+				strcat(error_line, " ");
+				strcat(error_line, repName);
+				strcat(error_line, " ");
+				strcat(error_line, quantity);
+				strcat(error_line, "\n");
+				fprintf(currErr, error_line);
+			}
+			else
+			{
+
+				currInv->balance += strtol(price, &endptr, 10);
+			}
+
+
+		}
+
+		fclose(sale_file);
+
+	}
+	else
+	{
+		printf("cant find sell file. \n");
+	}
+
+	free(error_line); free(chemcode); free(quantity); free(price);
+
+
+}
+void inorder_print_to_file(chemNode* node, FILE* new_file)//recursive function prints on the file the data in chemTree in inorder in the form of lines
+{
+	char* quantity = calloc(9, sizeof(char));
+	char* line = calloc(61, sizeof(char));
+	if (quantity == NULL || line == NULL)
+	{
+		exit(0);//memmory allocation failed
+	}
+	if (node != NULL)
+	{
+		inorder_print_to_file(node->left, new_file);
+		strcat(line, node->data.chem_name);
+		strcat(line, " ");
+		strcat(line, node->data.chem_code);
+		strcat(line, " ");
+		fprintf(new_file, line);
+		fprintf(new_file, "%li", node->data.quantity);
+		fprintf(new_file, "\n");
+		inorder_print_to_file(node->right, new_file);
+		free(quantity);
+		free(line);
+	}
+
+}
+void insert(chemNode** root, chemNode* newNode)//insert the new node into the BST in proper place.
+{
+	if (!*root)
+	{
+		*root = make_node(&(newNode->data)); //get new node for tree
+	}
+	else
+	{
+    	if (strcmp(newNode->data.chem_code, (*root)->data.chem_code)<0)
+		{
+			insert(&(*root)->left, newNode);
+		}
+		else
+		{
+			insert(&(*root)->right, newNode);
+		}
+	}
+}
+
+
+
+chemNode* buildNode(FILE* currInv)
+{
+	char* endptr;
+	char temp;//used to read \n and ' ';
+	int res;
+	char* quantity = calloc(10, sizeof(char));
+	chemNode* newNode = malloc(1 * sizeof(chemNode));
+	if (newNode == NULL || quantity == NULL)
+	{
+		exit(0);//memmory allocation faild!
+	}
+	res = fscanf(currInv, "%[^ ]%c", newNode->data.chem_name, &temp);//reads chem name and space
+	if (res == EOF)
+	{
+		free(newNode);
+		return NULL;
+	}
+	res = fscanf(currInv, "%[^ ]%c", newNode->data.chem_code, &temp);//reads chem code and space
+	res = fscanf(currInv, "%[^\n]%c", quantity, &temp);//reads quantity and \n
+	
+
+	newNode->data.quantity = strtol(quantity, &endptr, 10);
+	newNode->left = NULL;
+	newNode->right = NULL;
+	free(quantity);
+
+	return newNode;
+
+}
+
+chemTree* buildTree(char* txtFileName, chemTree* root)
+{
+	char temp;//used to read \n in every line
+	chemNode* newNode;
+	FILE* inventory = fopen(txtFileName, "r");//open the file
+	if (inventory != NULL)
+	{
+		newNode = buildNode(inventory);//create a node with the first line as data
+		root->root = newNode;//define the first line node as the root
+
+		while (newNode != NULL)
+		{
+			newNode = buildNode(inventory);//create node for every lines data
+
+			if (newNode != NULL)
+			{
+				insert(&(root->root), newNode);//insert the node to the BST
+			}
+		}
+		fclose(inventory);
+        
+		return root;//return the new tree by the root
+	}
+	else
+	{
+		printf("Error in openning inventory file.Inventory tree initialized as empty.\n");
+		return NULL;
+	}
+	
+
+
+}
+chemTree* initInventory(char* invFileName, double bal, chemTree* invTree)
+{
+	if (invTree == NULL)
+	{
+		invTree = malloc(1 * sizeof(chemTree));
+		if (invTree == NULL)
+		{
+			exit(0);//faild to alocate memmory
+		}
+
+	}
+	else
+	{
+		destroyTree(invTree->root);
+	}
+	invTree = buildTree(invFileName, invTree);//call build tree with the inv file
+	if (invTree != NULL)
+	{
+		invTree->balance = bal;
+	}
+
+
+	return invTree;
+
+}
+FILE* initErr(char* errFileName, FILE* currErr)
+{
+
+	if (currErr != NULL)
+	{
+		fclose(currErr);
+	}
+	FILE* errfile = fopen(errFileName, "a+");
+	if (errfile == NULL)
+	{
+		printf("Could not open file %s.\n", errFileName);
+	}
+	else
+	{
+		return errfile;
+
+	}
+
+}
+int saveInventory(char* invFileName, char* errFileName, chemTree* currInv, FILE* currErr)
+{
+	char c;
+	int res = 0, size;
+	char temp = ' ';
+	char* line = calloc(60, sizeof(char));//20+20+9+ 2 spaces + \n +little extra.
+	char* pline = calloc(60, sizeof(char));//20+20+9+ 2 spaces + \n +little extra.
+	if (line == NULL || pline == NULL)
+	{
+		exit(0);//memmory allocation failed
+	}
+	FILE* inventory = fopen(invFileName, "w");
+	FILE* errors = fopen(errFileName, "w");
+	if (inventory == NULL || errors == NULL)
+	{
+		return 0;
+	}
+	res = fscanf(currErr, "%c", &c);
+	while (res != EOF)
+	{
+		fputc(c, errors);
+		res = fscanf(currErr, "%c", &c);
+	}
+
+	fclose(errors);
+
+
+
+	inorder_print_to_file(currInv->root, inventory);
+	fclose(inventory);
+	free(line); free(pline);
+	return 1;
+
+}
+
+
+void print_menu(double balance)//prints the main menu
+{
+
+	printf("Welcome to Chem-R-Us LTD database. Current company balance is %lf.\nPlease select an option from the following menu\n", balance);
+	printf("Please enter choice.\n");
+	printf("0) Quit.\n");
+	printf("1) Initialize company balance and inventory and error report files.\n");
+	printf("2) Save current Inventory and error status to files.\n");
+	printf("3) Record a sale.\n");
+	printf("4) Record a purchase.\n\n");
+}
+
+
+
+int main()
+{
+	double cost, quan;
+	char temp;//used to clean the buffer
+	double balance = 0;
+	char* invFilename = calloc(200, sizeof(char));
+	char* errFilename = calloc(200, sizeof(char));
+	char* newInvFilename = calloc(200, sizeof(char));
+	char* newErrFilename = calloc(200, sizeof(char));
+	char* newSell = calloc(200, sizeof(char));
+
+	buyInfo* newpurch = malloc(1 * sizeof(buyInfo));
+	char* choice = calloc(2, sizeof(char));
+	int save_err_stat; //make_sale_stat;
+	if (invFilename == NULL || errFilename == NULL || choice == NULL)
+	{
+		exit(0);
+	}
+	chemTree* tree = NULL;
+	FILE* currErrors = NULL;
+
+	while (choice != "0")
+	{
+		if (tree == NULL)
+		{
+			print_menu(0);
+		}
+		else
+		{
+			
+			print_menu(tree->balance);
+		}
+
+		scanf("%s", choice);
+		while (getchar() != '\n');//clean buffer
+		if (strcmp(choice, "0") == 0)
+		{
+			exit(0);
+		}
+		if (!(strcmp(choice, "1") == 0 || strcmp(choice, "2") == 0 || strcmp(choice, "3") == 0 || strcmp(choice, "4") == 0))
+		{
+			printf("Command not recognized.Try again.\n");
+		}
+		else
+		{
+
+			if (strcmp(choice, "1") == 0)
+			{
+				printf("Please enter inventory file name: ");//recieve invfilename
+				scanf("%s", invFilename);
+				printf("Please enter balance value: ");
+				while (scanf("%lf", &balance) != 1)//recieve balance
+				{
+					printf("Error in floating point number input. Try again:");
+					while (getchar() != '\n');//clean buffer
+				}
+
+
+				tree = initInventory(invFilename, balance, tree);//initiate invTree
+
+
+				printf("Please enter error file name: ");
+				scanf("%s", errFilename);//recieve error file name
+				currErrors = initErr(errFilename, currErrors);
+
+
+
+			}
+			else
+			{
+				if (tree == NULL)
+				{
+					printf("inventory not initialized yet. Initialize before choosing any other option.\n");
+				}
+				else
+				{
+
+
+					if (strcmp(choice, "2") == 0)
+					{
+						currErrors = fopen(errFilename, "r");
+						printf("Please enter name of file for saving current inventory status: ");
+						scanf("%s", newInvFilename);
+						printf("Please enter name of file for saving error status: ");
+						scanf("%s", newErrFilename);
+						fprintf(currErrors, "this is the end");
+						save_err_stat = saveInventory(newInvFilename, newErrFilename, tree, currErrors);
+						if (save_err_stat == 0)
+						{
+							printf("failed to save inventory and errors files\n");
+						}
+						else
+						{
+							//	printf("succeed in save inventory and errors\n");
+						}
+						fclose(currErrors);
+					}
+
+					if (strcmp(choice, "3") == 0)
+					{
+						currErrors = fopen(errFilename, "a+");
+						printf("Please enter name of sale file: ");
+						scanf("%s", newSell);
+
+						makeSale(newSell, tree, currErrors);
+						fclose(currErrors);
+
+
+					}
+					if (strcmp(choice, "4") == 0)
+					{
+						printf("Please insert chemical name: ");
+						scanf("%[a-zA-Z]", newpurch->chem_name);
+						printf("Please insert chemical code: ");
+						scanf("%s", newpurch->chem_code);
+						printf("Please insert chemical quantity: ");
+						while (scanf("%lf", &quan) != 1)//recieve 
+						{
+							printf("invalid input. Try again: ");
+							while (getchar() != '\n');//clean buffer
+						}
+						newpurch->quantity = quan;
+						printf("Please insert chemical cost: ");
+						while (scanf("%lf", &cost) != 1)//recieve balance
+						{
+							printf("invalid input. Try again: ");
+							while (getchar() != '\n');//clean buffer
+						}
+						newpurch->cost = cost;
+						makePurchase(newpurch, tree);
+
+
+					}
+				}
+			}
+
+
+		}
+
+	}
+
+
+
+	return 0;
+}
