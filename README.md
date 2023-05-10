@@ -69,7 +69,7 @@ and the program goes back displaying the menu
 
 # chemistry_inventory _task
 
-the program uses a outside date text file
+the program uses a outside date text file.
 
-the main objective is to run a menu of chemistry compeny that can edit the inventory at the external text file while, updating the inventory according to the menu choices
+the main objective is to run a menu of chemistry compeny that can edit the inventory at the external text file while, updating the inventory according to the menu choices.
 
