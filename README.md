@@ -66,3 +66,9 @@ In case the sentence isn’t initialized and the user choosed commands 2-9 the
 following message will appear: ERROR: The sentence is empty.
 
 and the program goes back displaying the menu
+
+#chemistry_inventory _task
+
+the program uses a outside date text file
+the main objective is to run a menu of chemistry compeny that can edit the inventory at the external text file while, updating the inventory according to the menu choices
+
