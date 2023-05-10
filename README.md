@@ -1,5 +1,6 @@
 # c_assignments
-string_manipulation_menu
+
+# string_manipulation_menu
 
   Write a program that manipulates one sentence. A sentence is a sequence of words over
   
